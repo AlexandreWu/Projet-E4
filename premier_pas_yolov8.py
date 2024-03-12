@@ -50,4 +50,36 @@ for result in results:
         # else:
         #     print("Unexpected format for box.xywh:", box.xywh)
 
-print (tracking_data)
+# print (tracking_data)
+
+
+
+
+from pymongo import MongoClient
+
+# Connexion à la base de données MongoDB
+client = MongoClient('mongodb://localhost:27017/')  # URL de connexion MongoDB
+database = client['tracking_database']  # Sélectionnez ou créez une base de données
+
+# Créez une collection pour stocker les données de suivi
+tracking_collection = database['tracking_data']
+
+# Parcourez les données de suivi et insérez-les dans la collection MongoDB
+for track_data in tracking_data:
+    # Créez un document à insérer dans la collection
+    track_document = {
+        'track_id': track_data[0],
+        'class_id': track_data[1],
+        'x': track_data[2],
+        'y': track_data[3],
+        'w': track_data[4],
+        'h': track_data[5],
+        'conf': track_data[6]
+    }
+    # Insérez le document dans la collection MongoDB
+    tracking_collection.insert_one(track_document)
+
+# Fermez la connexion à la base de données
+client.close()
+
+print("Les données de suivi ont été stockées dans la base de données MongoDB avec succès.")
