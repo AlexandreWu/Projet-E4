@@ -4,7 +4,7 @@ from ultralytics import YOLO
 model = YOLO('yolov8n.pt')
 
 # Run tracking
-results = model.track(source='suitcase_2.mp4', show=True, tracker="bytetrack.yaml", classes=[0, 28, 24, 26], save=True, name='test')
+results = model.track(source='test.mp4', show=True, tracker="bytetrack.yaml", classes=[0, 28, 24, 26], save=True, name='test')
 
 # Initialize an empty list to store tracking data
 tracking_data = []
@@ -34,7 +34,9 @@ tracking_data = []
 # print(tracking_data)
 
 # Process results
-for result in results:
+
+for i, result in enumerate(results):
+    frame_number = i  # This will be your frame index
     for box in result.boxes:
         # Print box.xywh to understand its format
         # print("xywh:", box.xywh)
@@ -46,7 +48,8 @@ for result in results:
         # if box.xywh.dim() == 2 and box.xywh.size(1) == 4:
         x, y, w, h = box.xywh.squeeze().tolist()  # Extract inner tensor and convert to list
         conf = box.conf.item()
-        tracking_data.append((track_id, class_id, x, y, w, h, conf))
+        coord = box.xyxy[0].tolist()
+        tracking_data.append((track_id, class_id, x, y, w, h, conf,coord, frame_number))
         # else:
         #     print("Unexpected format for box.xywh:", box.xywh)
 
@@ -74,7 +77,9 @@ for track_data in tracking_data:
         'y': track_data[3],
         'w': track_data[4],
         'h': track_data[5],
-        'conf': track_data[6]
+        'conf': track_data[6],
+        'coord': track_data[7],
+        'frame': track_data[8]
     }
     # Insérez le document dans la collection MongoDB
     tracking_collection.insert_one(track_document)
