@@ -1,0 +1,56 @@
+import os
+from ultralytics import YOLO
+from pymongo import MongoClient
+import datetime
+
+# Définir la variable d'environnement pour OpenMP
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
+# Configuration MongoDB
+mongo_client = MongoClient('mongodb://localhost:27017/')
+db = mongo_client['tracking_database']
+humans_collection = db['humans']
+suitcases_collection = db['suitcases']
+
+# Initialisation du modèle YOLOv8
+model = YOLO('yolov8n.pt')
+
+# Fonction pour traiter une vidéo et stocker/mettre à jour les résultats de suivi
+def track_and_detect(video_path):
+    # Définition des IDs de classe pour les humains et les valises
+    class_ids = {'person': 0, 'suitcase': 28}
+
+    # Exécution du suivi sur la vidéo spécifiée
+    results = model.track(source=video_path, show=True, tracker="bytetrack.yaml", 
+                          classes=list(class_ids.values()), save=True, name='tracking_results')
+
+    # Traitement des résultats
+    for result in results:
+        for box in result.boxes:
+            track_id = box.id.item()
+            class_id = box.cls.item()
+            x, y, w, h = box.xywh.squeeze().tolist()
+            conf = box.conf.item()
+
+            document = {
+                '$set': {
+                    'track_id': track_id,
+                    'class_id': class_id,
+                    'bbox': [x, y, w, h],
+                    'conf': conf,
+                    'timestamp': datetime.datetime.utcnow()
+                }
+            }
+
+            # Déterminer la collection appropriée et mettre à jour ou insérer le document
+            collection = humans_collection if class_id == class_ids['person'] else suitcases_collection
+            collection.update_one({'track_id': track_id}, document, upsert=True)
+
+# Exemple d'utilisation
+video_path = 'C:/Users/EricR/Documents/Yolov8/test.mp4'
+track_and_detect(video_path)
+
+# Fermeture de la connexion MongoDB
+mongo_client.close()
+
+print("Suivi et détection terminés, données mises à jour dans MongoDB.")
