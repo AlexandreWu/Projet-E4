@@ -11,46 +11,70 @@ mongo_client = MongoClient('mongodb://localhost:27017/')
 db = mongo_client['tracking_database']
 humans_collection = db['humans']
 suitcases_collection = db['suitcases']
+associations_collection = db['associations']
 
 # Initialisation du modèle YOLOv8
 model = YOLO('yolov8n.pt')
 
-# Fonction pour traiter une vidéo et stocker/mettre à jour les résultats de suivi
-def track_and_detect(video_path):
-    # Définition des IDs de classe pour les humains et les valises
-    class_ids = {'person': 0, 'suitcase': 28}
+def calculate_distance(bbox1, bbox2):
+    center_x1, center_y1 = bbox1[0] + bbox1[2] / 2, bbox1[1] + bbox1[3] / 2
+    center_x2, center_y2 = bbox2[0] + bbox2[2] / 2, bbox2[1] + bbox2[3] / 2
+    return ((center_x1 - center_x2) ** 2 + (center_y1 - center_y2) ** 2) ** 0.5
 
-    # Exécution du suivi sur la vidéo spécifiée
-    results = model.track(source=video_path, show=True, tracker="bytetrack.yaml", 
+def track_and_associate(video_path):
+    class_ids = {'person': 0, 'suitcase': 28}
+    results = model.track(source=video_path, show=True, tracker="bytetrack.yaml",
                           classes=list(class_ids.values()), save=True, name='tracking_results')
 
-    # Traitement des résultats
-    for result in results:
-        for box in result.boxes:
+    for frame_result in results:
+        timestamp = datetime.datetime.utcnow()
+        
+        # Traiter chaque détection
+        for box in frame_result.boxes:
             track_id = box.id.item()
             class_id = box.cls.item()
-            x, y, w, h = box.xywh.squeeze().tolist()
+            bbox = box.xywh.squeeze().tolist()
             conf = box.conf.item()
 
-            document = {
-                '$set': {
-                    'track_id': track_id,
-                    'class_id': class_id,
-                    'bbox': [x, y, w, h],
-                    'conf': conf,
-                    'timestamp': datetime.datetime.utcnow()
-                }
+            # Document de détection
+            detection_doc = {
+                'track_id': track_id,
+                'class_id': class_id,
+                'bbox': bbox,
+                'conf': conf,
+                'timestamp': timestamp
             }
 
-            # Déterminer la collection appropriée et mettre à jour ou insérer le document
-            collection = humans_collection if class_id == class_ids['person'] else suitcases_collection
-            collection.update_one({'track_id': track_id}, document, upsert=True)
+            # Choisir la collection appropriée et insérer le document de détection
+            target_collection = humans_collection if class_id == class_ids['person'] else suitcases_collection
+            target_collection.update_one({'track_id': track_id}, {'$set': detection_doc}, upsert=True)
+
+            # Association et stockage des positions
+            if class_id == class_ids['suitcase']:
+                # Trouver le plus proche humain pour cette valise
+                closest_human, min_distance = None, float('inf')
+                for human in humans_collection.find():
+                    human_bbox = human.get('bbox', [])
+                    distance = calculate_distance(bbox, human_bbox)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_human = human['track_id']
+                
+                # Document d'association
+                if closest_human is not None:
+                    association_doc = {
+                        'suitcase_id': track_id,
+                        'human_id': closest_human,
+                        'distance': min_distance,
+                        'timestamp': timestamp
+                    }
+                    associations_collection.insert_one(association_doc)
 
 # Exemple d'utilisation
 video_path = 'C:/Users/EricR/Documents/Yolov8/test.mp4'
-track_and_detect(video_path)
+track_and_associate(video_path)
 
 # Fermeture de la connexion MongoDB
 mongo_client.close()
 
-print("Suivi et détection terminés, données mises à jour dans MongoDB.")
+print("Suivi, détection et associations mises à jour dans MongoDB.")
