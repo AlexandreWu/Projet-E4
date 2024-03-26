@@ -13,8 +13,11 @@ humans_collection = db['humans']
 suitcases_collection = db['suitcases']
 associations_collection = db['associations']
 
+
 # Initialisation du modèle YOLOv8
 model = YOLO('yolov8n.pt')
+association_dict = {}
+
 
 def calculate_distance(bbox1, bbox2):
     center_x1, center_y1 = bbox1[0] + bbox1[2] / 2, bbox1[1] + bbox1[3] / 2
@@ -55,31 +58,49 @@ def track_and_associate(video_path):
             target_collection.update_one({'track_id': track_id}, {'$set': detection_doc}, upsert=True)
 
             # Association et stockage des positions
+
             if class_id == class_ids['suitcase']:
-                # Trouver le plus proche humain pour cette valise
-                closest_human, min_distance = None, float('inf')
-                for human in humans_collection.find():
-                    human_bbox = human.get('bbox', [])
-                    distance = calculate_distance(bbox, human_bbox)
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_human = human['track_id']
+                min_distance = 50
+                closest_human = None
+
+                # Vérifier s'il existe une association précédente pour cette valise
+                if track_id in association_dict:
+                    closest_human = association_dict[track_id]
+
+                if closest_human is not None:
+                    # Vérifier si l'humain associé est toujours détecté
+                    associated_human = humans_collection.find_one({'track_id': closest_human})
+                    if associated_human is not None:
+                        human_bbox = associated_human.get('bbox', [])
+                        min_distance = calculate_distance(bbox, human_bbox)
+                    else:
+                        # Si l'humain associé n'est pas détecté, marquer la distance comme 10000
+                        min_distance = 10000
+                else:
+                    # Trouver le plus proche humain pour cette valise
+                    for human in humans_collection.find():
+                        human_bbox = human.get('bbox', [])
+                        distance = calculate_distance(bbox, human_bbox)
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_human = human['track_id']
                 
                 # Document d'association
-                if closest_human is not None:
-                    association_doc = {
-                        'suitcase_id': track_id,
-                        'human_id': closest_human,
-                        'distance': min_distance,
-                        'timestamp': timestamp,
-                        'coord_valise': coord,
-                        'bbox_valise':bbox,
-                        'frame': frame_number
-                    }
-                    associations_collection.insert_one(association_doc)
+                association_doc = {
+                    'suitcase_id': track_id,
+                    'human_id': closest_human,
+                    'distance': min_distance,
+                    'timestamp': timestamp,
+                    'coord_valise': coord,
+                    'bbox_valise': bbox,
+                    'frame': frame_number
+                }
+                associations_collection.insert_one(association_doc)
+                # Mettre à jour l'association dans le dictionnaire
+                association_dict[track_id] = closest_human
 
 # Exemple d'utilisation
-video_path = 'test.mp4'
+video_path = 'Abandoned_Object_Detection.mp4'
 track_and_associate(video_path)
 
 # Fermeture de la connexion MongoDB
