@@ -25,7 +25,7 @@ def calculate_distance(bbox1, bbox2):
     return ((center_x1 - center_x2) ** 2 + (center_y1 - center_y2) ** 2) ** 0.5
 
 def track_and_associate(video_path):
-    class_ids = {'person': 0, 'suitcase': 28}
+    class_ids = {'person': 0, 'suitcase': 28, 'backpack':24}
     results = model.track(source=video_path, show=True, tracker="bytetrack.yaml",
                           classes=list(class_ids.values()), save=True, name='tracking_results')
 
@@ -59,8 +59,8 @@ def track_and_associate(video_path):
 
             # Association et stockage des positions
 
-            if class_id == class_ids['suitcase']:
-                min_distance = 50
+            if class_id == class_ids['suitcase'] or class_id == class_ids['backpack']:
+                min_distance = 200
                 closest_human = None
 
                 # Vérifier s'il existe une association précédente pour cette valise
@@ -72,10 +72,12 @@ def track_and_associate(video_path):
                     associated_human = humans_collection.find_one({'track_id': closest_human})
                     if associated_human is not None:
                         human_bbox = associated_human.get('bbox', [])
-                        min_distance = calculate_distance(bbox, human_bbox)
-                    else:
-                        # Si l'humain associé n'est pas détecté, marquer la distance comme 10000
-                        min_distance = 10000
+                        human_frame = associated_human.get('frame')
+                        if human_frame == frame_number:
+                            min_distance = calculate_distance(bbox, human_bbox)
+                        else:
+                            # Si l'humain associé n'est pas détecté, marquer la distance comme 10000
+                            min_distance = 10000
                 else:
                     # Trouver le plus proche humain pour cette valise
                     for human in humans_collection.find():
@@ -100,7 +102,7 @@ def track_and_associate(video_path):
                 association_dict[track_id] = closest_human
 
 # Exemple d'utilisation
-video_path = 'Abandoned_Object_Detection.mp4'
+video_path = 'Video1.mp4'
 track_and_associate(video_path)
 
 # Fermeture de la connexion MongoDB
