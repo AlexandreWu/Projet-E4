@@ -29,7 +29,7 @@ abandoned_bag_track_ids = []
 
 
 # Nombre maximal de frames sans mouvement pour déclencher l'alerte
-max_frames_without_movement = 650
+max_frames_without_movement = 1000
 
 # Dictionnaire pour stocker les dernières positions des valises par track_id
 last_bag_positions = {}
@@ -48,7 +48,7 @@ for index, row in df.iterrows():
     frame_number = row['frame']
     
     # Supposons que la classe 28 représente les valises
-    if distance > 350:
+    if distance > 300:
         x= bbox[0]
         y=bbox[1]
         bag_center = (x, y)
@@ -91,7 +91,7 @@ for track_id, frame_count in frames_without_movement.items():
 
 
 # Charger la vidéo
-video_path = 'Abandoned_Object_Detection.mp4'  # Mettez le chemin de votre vidéo ici
+video_path = 'Video1.mp4'  # Mettez le chemin de votre vidéo ici
 cap = cv2.VideoCapture(video_path)
 
 # Récupérer les détails de la vidéo
@@ -106,6 +106,12 @@ thickness = 2
 
 
 # Supposons que vous ayez déjà les track_id des valises abandonnées dans la liste abandoned_bag_track_ids
+
+
+# Définissez le codec et créez un objet VideoWriter
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+output_video_path = 'Video1_with_alerts.mp4'  # Nom du fichier de sortie
+output_video = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
 # Boucle sur les frames de la vidéo
 while cap.isOpened():
@@ -122,11 +128,13 @@ while cap.isOpened():
         x1, y1, x2, y2 = cords
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         
-        if current_frame > first_abandoned_frames.get(track_id, -1):
+        if current_frame > first_abandoned_frames.get(row['suitcase_id'], -1):
             # Dessiner le cadre rouge autour de la valise
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
             cv2.putText(frame, 'Alerte', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
+    # Écrire la frame modifiée dans la vidéo de sortie
+    output_video.write(frame)
     
     # Afficher la frame
     cv2.imshow('Frame', frame)
@@ -137,4 +145,7 @@ while cap.isOpened():
 
 # Libérer les ressources
 cap.release()
+output_video.release()
 cv2.destroyAllWindows()
+
+print(f"La vidéo avec les alertes a été enregistrée sous {output_video_path}.")
