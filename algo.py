@@ -29,13 +29,14 @@ abandoned_bag_track_ids = []
 
 
 # Nombre maximal de frames sans mouvement pour déclencher l'alerte
-max_frames_without_movement = 200
+max_frames_without_movement = 650
 
 # Dictionnaire pour stocker les dernières positions des valises par track_id
 last_bag_positions = {}
 
 # Dictionnaire pour compter le nombre de frames sans mouvement pour chaque valise
 frames_without_movement = {}
+first_abandoned_frames = {}
 
 # Boucle sur les données de suivi
 for index, row in df.iterrows():
@@ -47,7 +48,7 @@ for index, row in df.iterrows():
     frame_number = row['frame']
     
     # Supposons que la classe 28 représente les valises
-    if distance > 115:
+    if distance > 350:
         x= bbox[0]
         y=bbox[1]
         bag_center = (x, y)
@@ -59,14 +60,18 @@ for index, row in df.iterrows():
             distance_moved = ((x - last_x) ** 2 + (y - last_y) ** 2) ** 0.5
             
             # Si la valise ne bouge pas ou bouge très peu, incrémenter le compteur de frames sans mouvement
-            if distance_moved < 5:
+            if distance_moved < 6:
                 frames_without_movement[track_id] = frames_without_movement.get(track_id, 0) + 1
             else:
                 frames_without_movement[track_id] = 0  # Réinitialiser le compteur si la valise bouge
                 
             # Si la valise n'a pas bougé pendant un certain nombre de frames, déclencher une alerte
             if frames_without_movement[track_id] >= max_frames_without_movement:
+                if track_id not in first_abandoned_frames:
+                    first_abandoned_frames[track_id] = frame_number
                 print(f"Alerte : Valise {track_id} abandonnée pendant {max_frames_without_movement} frames à la frame {frame_number}.")
+                abandoned_bag_track_ids.append(track_id)
+
         else:
             # Initialiser les positions et le compteur pour un nouveau track_id de valise
             last_bag_positions[track_id] = (x, y)
@@ -84,10 +89,9 @@ for track_id, frame_count in frames_without_movement.items():
     
 
 
-# Supposons que votre DataFrame s'appelle df et a les colonnes suivantes : 'track_id', 'class_id', 'x', 'y', 'w', 'h', 'frame'
 
 # Charger la vidéo
-video_path = 'test.mp4'  # Mettez le chemin de votre vidéo ici
+video_path = 'Abandoned_Object_Detection.mp4'  # Mettez le chemin de votre vidéo ici
 cap = cv2.VideoCapture(video_path)
 
 # Récupérer les détails de la vidéo
@@ -118,9 +122,11 @@ while cap.isOpened():
         x1, y1, x2, y2 = cords
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         
-        # Dessiner le cadre rouge autour de la valise
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-        cv2.putText(frame, 'Alerte', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+        if current_frame > first_abandoned_frames.get(track_id, -1):
+            # Dessiner le cadre rouge autour de la valise
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+            cv2.putText(frame, 'Alerte', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+
     
     # Afficher la frame
     cv2.imshow('Frame', frame)
