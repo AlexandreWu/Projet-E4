@@ -26,8 +26,9 @@ def track_and_associate(video_path):
     results = model.track(source=video_path, show=True, tracker="bytetrack.yaml",
                           classes=list(class_ids.values()), save=True, name='tracking_results')
 
-    for frame_result in results:
+    for i, frame_result in enumerate(results):
         timestamp = datetime.datetime.utcnow()
+        frame_number = i
         
         # Traiter chaque détection
         for box in frame_result.boxes:
@@ -35,6 +36,8 @@ def track_and_associate(video_path):
             class_id = box.cls.item()
             bbox = box.xywh.squeeze().tolist()
             conf = box.conf.item()
+            coord = box.xyxy[0].tolist()
+
 
             # Document de détection
             detection_doc = {
@@ -42,7 +45,9 @@ def track_and_associate(video_path):
                 'class_id': class_id,
                 'bbox': bbox,
                 'conf': conf,
-                'timestamp': timestamp
+                'timestamp': timestamp,
+                'coord' : coord,
+                'frame': frame_number
             }
 
             # Choisir la collection appropriée et insérer le document de détection
@@ -66,12 +71,15 @@ def track_and_associate(video_path):
                         'suitcase_id': track_id,
                         'human_id': closest_human,
                         'distance': min_distance,
-                        'timestamp': timestamp
+                        'timestamp': timestamp,
+                        'coord_valise': coord,
+                        'bbox_valise':bbox,
+                        'frame': frame_number
                     }
                     associations_collection.insert_one(association_doc)
 
 # Exemple d'utilisation
-video_path = 'C:/Users/EricR/Documents/Yolov8/test.mp4'
+video_path = 'test.mp4'
 track_and_associate(video_path)
 
 # Fermeture de la connexion MongoDB
