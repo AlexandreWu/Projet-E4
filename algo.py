@@ -8,7 +8,7 @@ client = MongoClient('mongodb://localhost:27017/')  # URL de connexion MongoDB
 database = client['tracking_database']  # Sélectionnez ou créez une base de données
 
 # Récupérer les données de suivi depuis la collection MongoDB
-tracking_collection = database['tracking_data']
+tracking_collection = database['associations']
 cursor = tracking_collection.find()
 
 # Créer une liste pour stocker les données de suivi
@@ -39,14 +39,17 @@ frames_without_movement = {}
 
 # Boucle sur les données de suivi
 for index, row in df.iterrows():
-    track_id = row['track_id']
-    class_id = row['class_id']
-    x = row['x']
-    y = row['y']
+    distance = row['distance']
+    track_id = row['suitcase_id']
+    bbox= row['bbox_valise']
+    # x = row['x']
+    # y = row['y']
     frame_number = row['frame']
     
     # Supposons que la classe 28 représente les valises
-    if class_id == 28:
+    if distance > 115:
+        x= bbox[0]
+        y=bbox[1]
         bag_center = (x, y)
         
         # Vérifier si le track_id de la valise a déjà été vu
@@ -81,9 +84,6 @@ for track_id, frame_count in frames_without_movement.items():
     
 
 
-import cv2
-import pandas as pd
-
 # Supposons que votre DataFrame s'appelle df et a les colonnes suivantes : 'track_id', 'class_id', 'x', 'y', 'w', 'h', 'frame'
 
 # Charger la vidéo
@@ -113,8 +113,8 @@ while cap.isOpened():
     current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
     
     # Dessiner un cadre rouge autour des valises abandonnées
-    for index, row in df[(df['frame'] == current_frame) & (df['track_id'].isin(abandoned_bag_track_ids))].iterrows():
-        cords = row['coord']
+    for index, row in df[(df['frame'] == current_frame) & (df['suitcase_id'].isin(abandoned_bag_track_ids))].iterrows():
+        cords = row['coord_valise']
         x1, y1, x2, y2 = cords
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         
