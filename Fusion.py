@@ -21,15 +21,16 @@ def calculate_distance(bbox1, bbox2):
     return ((center1[0] - center2[0]) ** 2 + (center1[1] - center2[1]) ** 2) ** 0.5
 
 # Suivi et association des objets dans la vidéo
-def track_and_associate(video_path, model, humans_collection, suitcases_collection):
+def track_and_associate(video_path, model, humans_collection, suitcases_collection, associations_collection):
     class_ids = {'person': 0, 'suitcase': 28, 'backpack': 24}
     results = model.track(source=video_path, show=True, tracker="bytetrack.yaml", classes=list(class_ids.values()), save=True, name='tracking_results', stream=True)
-    
+    association_dict = {}
+
     for i, frame_result in enumerate(results):
-        process_frame(frame_result, i, humans_collection, suitcases_collection)
+        process_frame(frame_result, i, humans_collection, suitcases_collection, associations_collection, association_dict)
 
 # Traiter chaque frame pour la détection et l'association
-def process_frame(frame_result, frame_number, humans_collection, suitcases_collection):
+def process_frame(frame_result, frame_number, humans_collection, suitcases_collection, associations_collection,association_dict):
     class_ids = {'person': 0, 'suitcase': 28, 'backpack': 24}
     timestamp = datetime.datetime.utcnow()
     for box in frame_result.boxes:
@@ -41,6 +42,48 @@ def process_frame(frame_result, frame_number, humans_collection, suitcases_colle
         target_collection = humans_collection if class_id == class_ids['person'] else suitcases_collection
         target_collection.update_one({'track_id': track_id}, {'$set': detection_doc}, upsert=True)
 
+        if class_id == class_ids['suitcase'] or class_id == class_ids['backpack']:
+                min_distance = 200
+                closest_human = None
+
+                # Vérifier s'il existe une association précédente pour cette valise
+                if track_id in association_dict:
+                    closest_human = association_dict[track_id]
+
+                if closest_human is not None:
+                    # Vérifier si l'humain associé est toujours détecté
+                    associated_human = humans_collection.find_one({'track_id': closest_human})
+                    if associated_human is not None:
+                        human_bbox = associated_human.get('bbox', [])
+                        human_frame = associated_human.get('frame')
+                        if human_frame == frame_number:
+                            min_distance = calculate_distance(bbox, human_bbox)
+                        else:
+                            # Si l'humain associé n'est pas détecté, marquer la distance comme 10000
+                            min_distance = 10000
+                else:
+                    # Trouver le plus proche humain pour cette valise
+                    for human in humans_collection.find():
+                        human_bbox = human.get('bbox', [])
+                        distance = calculate_distance(bbox, human_bbox)
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_human = human['track_id']
+                
+                # Document d'association
+                association_doc = {
+                    'suitcase_id': track_id,
+                    'human_id': closest_human,
+                    'distance': min_distance,
+                    'timestamp': timestamp,
+                    'coord_valise': coord,
+                    'bbox_valise': bbox,
+                    'frame': frame_number
+                }
+                associations_collection.insert_one(association_doc)
+                # Mettre à jour l'association dans le dictionnaire
+                association_dict[track_id] = closest_human
+
 # Identifier les bagages abandonnés basé sur la logique définie
 def identify_abandoned_luggage(associations_collection, threshold_distance=300, threshold_movement=6, max_frames_without_movement=1000):
     print("Identification des bagages abandonnés en cours...")
@@ -49,25 +92,35 @@ def identify_abandoned_luggage(associations_collection, threshold_distance=300, 
 
     last_positions = {}
     frames_without_movement = {}
+    first_abandoned_frames = {}
+
 
     for doc in sorted(association_docs, key=lambda x: x['frame']):
-        track_id = doc['object_id']
-        bbox = doc['bbox_object']
-        if track_id not in last_positions:
+        track_id = doc['suitcase_id']
+        bbox = doc['bbox_valise']
+        distance = doc['distance']
+        frame_number = doc['frame']
+
+        if distance > threshold_distance:
+
+            if track_id not in last_positions:
+                last_positions[track_id] = bbox
+                frames_without_movement[track_id] = 0
+                continue
+            
+            distance_moved = calculate_distance(last_positions[track_id], bbox)
+            if distance_moved < threshold_movement:
+                frames_without_movement[track_id] += 1
+            else:
+                frames_without_movement[track_id] = 0
+
+            if frames_without_movement[track_id] >= max_frames_without_movement:
+                if track_id not in first_abandoned_frames:
+                    first_abandoned_frames[track_id] = frame_number
+                abandoned_bag_track_ids.add(track_id)
+                print(f"Alerte : Valise {track_id} abandonnée pendant {max_frames_without_movement} frames à la frame {frame_number}.")
+
             last_positions[track_id] = bbox
-            frames_without_movement[track_id] = 0
-            continue
-
-        distance_moved = calculate_distance(last_positions[track_id], bbox)
-        if distance_moved < threshold_movement:
-            frames_without_movement[track_id] += 1
-        else:
-            frames_without_movement[track_id] = 0
-
-        if frames_without_movement[track_id] >= max_frames_without_movement:
-            abandoned_bag_track_ids.add(track_id)
-
-        last_positions[track_id] = bbox
 
     print(f"Bagages abandonnés détectés : {abandoned_bag_track_ids}")
     return abandoned_bag_track_ids
@@ -82,7 +135,7 @@ def prepare_video_output(video_path):
     # Initialiser la capture vidéo et le writer de vidéo de sortie
     cap = cv2.VideoCapture(video_path)
     fps, frame_width, frame_height = get_video_properties(cap)
-    output_video = cv2.VideoWriter('Video_with_alerts.mp4', cv2.VideoWriter_fourcc(*'MP4V'), fps, (frame_width, frame_height))
+    output_video = cv2.VideoWriter('test_with_alerts.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (frame_width, frame_height))
     return cap, output_video
 
 def get_video_properties(cap):
@@ -103,7 +156,7 @@ def process_video_frames(cap, output_video, abandoned_bag_track_ids, association
 
         current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         for track_id in abandoned_bag_track_ids:
-            doc = associations_collection.find_one({'object_id': track_id, 'frame': current_frame})
+            doc = associations_collection.find_one({'suitcase_id': track_id, 'frame': current_frame})
             if doc:
                 coord = doc['coord_object']
                 x1, y1, x2, y2 = map(int, coord)
@@ -129,7 +182,7 @@ def main():
     model = YOLO('yolov8n.pt')
     video_path = 'test.mp4'
 
-    track_and_associate(video_path, model, humans_collection, suitcases_collection)
+    track_and_associate(video_path, model, humans_collection, suitcases_collection, associations_collection)
     abandoned_bag_track_ids = identify_abandoned_luggage(associations_collection)
     generate_alerts(video_path, abandoned_bag_track_ids, associations_collection)
 
