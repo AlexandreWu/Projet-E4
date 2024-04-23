@@ -123,19 +123,19 @@ def identify_abandoned_luggage(associations_collection, threshold_distance=300, 
             last_positions[track_id] = bbox
 
     print(f"Bagages abandonnés détectés : {abandoned_bag_track_ids}")
-    return abandoned_bag_track_ids
+    return abandoned_bag_track_ids,first_abandoned_frames
 
 # Générer des alertes sur la vidéo pour les bagages abandonnés
-def generate_alerts(video_path, abandoned_bag_track_ids, associations_collection):
+def generate_alerts(video_path, abandoned_bag_track_ids, associations_collection,first_abandoned_frames):
     cap, output_video = prepare_video_output(video_path)
-    process_video_frames(cap, output_video, abandoned_bag_track_ids, associations_collection)
+    process_video_frames(cap, output_video, abandoned_bag_track_ids, associations_collection,first_abandoned_frames)
     finalize_video_output(cap, output_video)
 
 def prepare_video_output(video_path):
     # Initialiser la capture vidéo et le writer de vidéo de sortie
     cap = cv2.VideoCapture(video_path)
     fps, frame_width, frame_height = get_video_properties(cap)
-    output_video = cv2.VideoWriter('test_with_alerts.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (frame_width, frame_height))
+    output_video = cv2.VideoWriter('Video_fusion_alerte.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (frame_width, frame_height))
     return cap, output_video
 
 def get_video_properties(cap):
@@ -144,7 +144,7 @@ def get_video_properties(cap):
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     return fps, frame_width, frame_height
 
-def process_video_frames(cap, output_video, abandoned_bag_track_ids, associations_collection):
+def process_video_frames(cap, output_video, abandoned_bag_track_ids, associations_collection,first_abandoned_frames):
     color = (0, 0, 255)  # Rouge en BGR pour l'alerte
     thickness = 2  # Épaisseur du rectangle
     font = cv2.FONT_HERSHEY_SIMPLEX  # Police pour le texte
@@ -158,10 +158,11 @@ def process_video_frames(cap, output_video, abandoned_bag_track_ids, association
         for track_id in abandoned_bag_track_ids:
             doc = associations_collection.find_one({'suitcase_id': track_id, 'frame': current_frame})
             if doc:
-                coord = doc['coord_object']
+                coord = doc['coord_valise']
                 x1, y1, x2, y2 = map(int, coord)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-                cv2.putText(frame, 'Abandonné', (x1, y1 - 10), font, 0.5, color, 2)
+                if current_frame > first_abandoned_frames.get(doc['suitcase_id'], -1):
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+                    cv2.putText(frame, 'Abandonné', (x1, y1 - 10), font, 0.5, color, 2)
 
         output_video.write(frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -180,11 +181,11 @@ def finalize_video_output(cap, output_video):
 def main():
     humans_collection, suitcases_collection, associations_collection = initialize_database()
     model = YOLO('yolov8n.pt')
-    video_path = 'test.mp4'
+    video_path = 'Video1.mp4'
 
     track_and_associate(video_path, model, humans_collection, suitcases_collection, associations_collection)
-    abandoned_bag_track_ids = identify_abandoned_luggage(associations_collection)
-    generate_alerts(video_path, abandoned_bag_track_ids, associations_collection)
+    abandoned_bag_track_ids, first_abandoned_frames = identify_abandoned_luggage(associations_collection)
+    generate_alerts(video_path, abandoned_bag_track_ids, associations_collection,first_abandoned_frames)
 
 if __name__ == "__main__":
     main()
