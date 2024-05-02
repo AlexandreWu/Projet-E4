@@ -14,7 +14,7 @@ Pour exécuter le script, suivez ces étapes :
 2. Installez les dépendances requises en exécutant `pip install -r requirements.txt`.
 3. Assurez-vous d'avoir une instance MongoDB en cours d'exécution localement sur le port par défaut (27017).
 4. Placez votre vidéo dans le même répertoire que le script et mettez à jour le chemin de la vidéo dans la variable `video_path`.
-5. Exécutez le script en utilisant la commande `python script.py`.
+5. Exécutez le script en utilisant la commande `python fusion.py`.
 
 ## Paramètres personnalisables
 
