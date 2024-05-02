@@ -157,7 +157,7 @@ def identify_abandoned_luggage(associations_collection, threshold_distance=300, 
             last_positions[track_id] = bbox
         
         if track_id in frames_without_movement:
-            if frames_without_movement[track_id] > 100:
+            if frames_without_movement[track_id] > 300:
                 humans = df_humans[df_humans['frame'] == frame_number]
                 if len(humans)>=1:
                     for i in range(len(humans)):
@@ -175,11 +175,11 @@ def identify_abandoned_luggage(associations_collection, threshold_distance=300, 
                                 first_abandoned_frames_cas1[track_id] = frame_number
                             abandoned_bag_track_ids_cas1.add(track_id)
                             timer += 1
-                            if timer > 300 : 
+                            if timer > 1800 : 
                                 bascule[track_id] += 1
                     else :
                         timer_ += 1
-                        if timer_ > 700:
+                        if timer_ > 900:
                             for i in range(1000):
                                 bascule[i]+=1
 
