@@ -26,5 +26,5 @@ Vous pouvez ajuster certains paramètres dans le script pour correspondre à vos
 
 ## Remarques
 
-- Ce script a été testé sur des vidéos de courte durée. Pour des vidéos plus longues, il est recommandé d'ajuster les paramètres en fonction de la durée et de la fréquence des mouvements dans la vidéo.
+- Ce script a été testé sur des vidéos de 1min30. Pour des vidéos plus longues, il est recommandé d'ajuster les paramètres en fonction de la durée et de la fréquence des mouvements dans la vidéo.
 - La sortie vidéo avec les alertes sera enregistrée sous le nom "test_git.mp4" dans le répertoire de travail.
